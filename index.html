@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Arora!</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
+</head>
+
+<body class="has-background-dark">
+    <section class="section">
+        <div class="container box">
+            <h1 class="title">
+                Arora
+            </h1>
+            <p class="subtitle">
+                Record your audio <i>here</i>!
+            </p>
+
+            <h5 class="h5 has-text-info" id="record-time"></h5>
+            <br />
+            <button class="button is-primary is-small is-rounded" id="start-stop-record">
+                Start
+            </button>
+        </div>
+    </section>
+    <section class="section">
+        <div class="container box">
+            <h1 class="title">
+                Recordings
+            </h1>
+            <p class="subtitle">
+                You can download your recordings here.
+            </p>
+            <table class="table is-fullwidth is-hoverable">
+                <thead>
+                    <tr>
+                        <th>
+                            Name
+                        </th>
+                        <th>
+                            Duration
+                        </th>
+                        <th>
+                            Audio
+                        </th>
+                        <th>
+                            Action
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="recording-list-tbody">
+
+                </tbody>
+            </table>
+            
+        </div>
+    </section>
+    <template id="recording-trow">
+        <tr>
+            <td class="name">
+                Name
+            </td>
+            <td class="duration">
+            </td>
+            <td>
+               <audio src="" class="recording-audio" controls></audio> 
+            </td>
+            <td>
+                <button class="button is-success download-recording" type="button">
+                    Download
+                </button>
+            </td>
+        </tr>
+    </template>
+</body>
+<script>
+    const UseRecorder = async () => {
+        return new Promise(async resolve => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunk = [];
+
+            recorder.addEventListener("dataavailable", e => {
+                chunk.push(e.data);
+            });
+            const getRecordedData = () => chunk;
+            const getRecordedBlobUrl = () => {
+                const blob = new Blob(chunk);
+                return URL.createObjectURL(blob);
+            };
+
+            const start = () => recorder.start();
+            const stop = () => {
+                return new Promise(r => {
+                    recorder.addEventListener("stop", () => {
+                        r({
+                            url: getRecordedBlobUrl()
+                        });
+                    });
+                    recorder.stop();
+                });
+            };
+            resolve({
+                recorder,
+                start,
+                stop,
+                getRecordedData,
+                getRecordedBlobUrl
+            });
+        });
+
+    };
+    const secondsToDisplay = (seconds) => `${parseInt(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+    document.addEventListener('DOMContentLoaded', async () => {
+        const startStopElm = document.querySelector("#start-stop-record");
+        const recordTimeElm = document.querySelector("#record-time");
+        let isRecording = false;
+        let interval;
+        let seconds = 0;
+        let recordManager;
+
+        const recordings = [];
+        const recordingListTbodyElm = document.querySelector('#recording-list-tbody');
+        const recordingTrowTemplate = document.querySelector('#recording-trow');
+
+        function downloadRecording(recording) {
+            const link = document.createElement('a');
+            link.href = recording.url;
+            link.download = recording.name + ".amr";
+
+            // this is necessary as link.click() does not work on the latest firefox
+            link.dispatchEvent(
+                new MouseEvent('click', { 
+                    bubbles: true, 
+                    cancelable: true, 
+                    view: window 
+                })
+            );
+        }
+
+        const displayRecording = (recording) => {
+            const tr = recordingTrowTemplate.content.cloneNode(true);
+            tr.querySelector('.duration').textContent = recording.duration;
+            tr.querySelector('.name').textContent = recording.name;
+            tr.querySelector('.recording-audio').src = recording.url;
+            tr.querySelector('.download-recording').addEventListener('click',e => {
+                e.preventDefault();
+                downloadRecording(recording);
+            });
+            recordingListTbodyElm.append(tr);
+        };
+
+        startStopElm.addEventListener('click',async e => {
+            e.preventDefault();
+            if (isRecording) {
+                const recordingData = await recordManager.stop();
+                clearInterval(interval);
+                const recording = {
+                    id: Symbol(),
+                    duration: secondsToDisplay(seconds),
+                    url: recordingData.url,
+                    name: prompt("Your recording name", "Recording001")
+                };
+                recordings.push(recording);
+                displayRecording(recording);
+                startStopElm.classList.remove('is-danger');
+                startStopElm.classList.add('is-primary');
+                startStopElm.textContent = "Start";
+                isRecording = false;
+                interval = null;
+                recordTimeElm.textContent = "";
+                seconds = 0;
+            }
+            else {
+                isRecording = true;
+                recordManager = await UseRecorder();
+                recordManager.start();
+                startStopElm.classList.add('is-danger');
+                startStopElm.classList.remove('is-primary');
+                startStopElm.textContent = "Stop";
+                recordTimeElm.textContent = "00:00";
+                interval = setInterval(() => {
+                    seconds += 1;
+                    let str = secondsToDisplay(seconds);
+                    recordTimeElm.textContent = str;
+                }, 1000);
+            }
+        });
+    });
+</script>
+<style>
+    body {
+        height: 100vh;
+    }
+</style>
+
+</html>
